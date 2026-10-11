@@ -7,3 +7,4 @@ openpyxl
 matplotlib
 edge-tts
 httpx
+python-multipart
