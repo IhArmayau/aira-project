@@ -5,6 +5,7 @@ import json
 import asyncio
 import docx
 import openpyxl
+import httpx
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,7 @@ import edge_tts
 app = FastAPI(
     title="AIRA Enterprise Backend API",
     description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="1.0.0"
+    version="1.0.1"
 )
 
 # CORS Setup - Allows Vercel/React/Tailwind Frontends to access the API safely
@@ -37,7 +38,7 @@ client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_FALLBACK_API_KEY"),
 )
 
-SYSTEM_PROMPT = """You are AIRA (Artificial Intelligence Responsive Assistant), a world-class AI Assistant, Voice Tutor, and Enterprise Productivity Specialist developed by Habeeb Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
+SYSTEM_PROMPT = """You are AIRA, which stands for Artificial Intelligence Responsive Assistant. You are a world-class AI Assistant, Voice Tutor, and Enterprise Productivity Specialist developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter. When asked about your name, who you are, or who developed you, always clearly and proudly explain that AIRA stands for Artificial Intelligence Responsive Assistant, developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, and named after Director Gaddafi Abubakar's daughter.
 
 ADVANCED INSTRUCTIONS FOR LIVE WEB BUILDER:
 - When asked to build a website, app, or UI component, generate clean, fully-styled code. Use standard inline CSS styles or Tailwind classes.
@@ -47,6 +48,24 @@ OTHER CAPABILITIES:
 1. VOICE TUTOR: Generate clear, concise sentences.
 2. BILINGUAL CODE-SWITCHING: Keep technical terminology in English, delivering explanations naturally in Hausa or English.
 """
+
+# Background task to prevent Render from going to sleep
+async def keep_alive_ping():
+    # Zaka iya mayar da wannan adireshin zuwa naka na Render ko barinsa haka
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
+    while True:
+        try:
+            async with httpx.AsyncClient() as client_http:
+                response = await client_http.get(render_url)
+                print(f"Uptime Ping Status: {response.status_code}")
+        except Exception as e:
+            print(f"Uptime Ping Error: {e}")
+        # Yana tura ping duk bayan minti 10 (seconds 600)
+        await asyncio.sleep(600)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(keep_alive_ping())
 
 class ChatMessage(BaseModel):
     role: str
@@ -101,29 +120,15 @@ async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
         print(f"TTS Notice: {e}")
     return None
 
-def generate_chart_from_data(labels, values, title="AIRA Data Analytics"):
-    try:
-        plt.figure(figsize=(6, 4))
-        plt.bar(labels, values, color='#2b5c8f')
-        plt.title(title)
-        plt.xlabel("Categories")
-        plt.ylabel("Values")
-        plt.tight_layout()
-        chart_path = "aira_chart.png"
-        plt.savefig(chart_path)
-        plt.close()
-        return chart_path
-    except Exception:
-        return None
-
 # Root Endpoint
 @app.get("/")
 def read_root():
     return {
         "status": "online",
-        "assistant": "AIRA",
+        "assistant": "AIRA (Artificial Intelligence Responsive Assistant)",
         "organization": "Al-Gaddaf Technology Hub",
-        "lead_developer": "Habeeb Armayau Isah"
+        "lead_developer": "Habibu Armayau Isah",
+        "named_after": "Director Gaddafi Abubakar's daughter"
     }
 
 # Primary AI Chat Endpoint
@@ -145,7 +150,6 @@ async def chat_endpoint(request: ChatRequest):
         bot_reply = response.choices[0].message.content
         log_to_dataset(request.message, bot_reply)
 
-        # Extract HTML preview if present
         html_code = None
         match = re.search(r"```html\s*(.*?)\s*```", bot_reply, re.DOTALL)
         if match:
