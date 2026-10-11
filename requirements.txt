@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+openai
+python-docx
+openpyxl
+pypdf
+matplotlib
+edge-tts
+python-multipart
