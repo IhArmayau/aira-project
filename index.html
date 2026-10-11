@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ha">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIRA AI Assistant - Al-Gaddaf Technology Hub</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col justify-between">
+    
+    <!-- Header -->
+    <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center border-b border-gray-700">
+        <div>
+            <h1 class="text-xl font-bold text-blue-400">AIRA</h1>
+            <p class="text-xs text-gray-400">Al-Gaddaf Technology Hub</p>
+        </div>
+        <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full animate-pulse">Online</span>
+    </header>
+
+    <!-- Chat Messages Container -->
+    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl mx-auto w-full">
+        <div class="flex justify-start">
+            <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm">
+                <p>Sannu! Ni ce <strong>AIRA</strong>, abokiyar aikinka ta fasahar zamani daga Al-Gaddaf Technology Hub. Me zan iya taimaka maka da shi yau?</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Form Area -->
+    <div class="bg-gray-800 p-4 border-t border-gray-700">
+        <form id="chat-form" class="max-w-3xl mx-auto flex gap-2">
+            <input type="text" id="user-input" placeholder="Rubuta tambayarka anan..." class="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+            <button type="submit" class="bg-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition text-sm">Aika</button>
+        </form>
+    </div>
+
+    <!-- JavaScript Logic to Connect with Render Backend -->
+    <script>
+        const API_URL = "https://aira-project-q0iz.onrender.com"; // Sabar da muka gama turawa Render
+        const chatContainer = document.getElementById('chat-container');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Nuna saƙon mai amfani a shafi
+            chatContainer.innerHTML += `
+                <div class="flex justify-end">
+                    <div class="bg-blue-600 p-3 rounded-lg max-w-lg text-sm">
+                        <p>${text}</p>
+                    </div>
+                </div>
+            `;
+            userInput.value = '';
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            try {
+                // Tura saƙo zuwa ga sabar ta Render
+                const response = await fetch(`${API_URL}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, history: [] })
+                });
+                const data = await response.json();
+
+                // Nuna amsar AIRA a shafi
+                chatContainer.innerHTML += `
+                    <div class="flex justify-start">
+                        <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm">
+                            <p>${data.reply}</p>
+                        </div>
+                    </div>
+                `;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            } catch (err) {
+                chatContainer.innerHTML += `
+                    <div class="flex justify-start">
+                        <div class="bg-red-600 p-3 rounded-lg max-w-lg text-sm">
+                            <p>An samu kuskure wajen haɗa sadarwa da sabar.</p>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>
