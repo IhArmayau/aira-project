@@ -20,7 +20,7 @@ import edge_tts
 app = FastAPI(
     title="AIRA Enterprise Backend API",
     description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="1.0.7"
+    version="1.0.8"
 )
 
 app.add_middleware(
@@ -38,28 +38,28 @@ client = OpenAI(
 
 SYSTEM_PROMPT = """You are AIRA, an AI Assistant and Voice Tutor developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
 
-CRITICAL FORMATTING INSTRUCTIONS FOR FRONTEND COMPATIBILITY:
-- Do NOT use Markdown headings like ### or raw Markdown formatting, as the user's frontend renders plain text.
-- Instead, use clean HTML tags OR double line breaks (\n\n) to structure paragraphs nicely.
-- Use <p> for paragraphs, <br> for line breaks, <b> for bold titles, and <code> or <pre> for code snippets.
-- Keep sentences short, concise, and easy to read for teenagers (Ages 12-16).
+STRICT FORMATTING RULE FOR FRONTEND RENDER:
+- Never use Markdown syntax like ###, **, *, or ```.
+- Always generate answers using clean HTML elements:
+  - Paragraphs: <p class="mb-2">...</p>
+  - Line breaks: <br>
+  - Bold titles/headings: <strong class="text-blue-400 font-bold block mb-1">...</strong>
+  - Code snippets: <pre class="bg-gray-900 text-green-400 p-2 rounded my-2 border border-gray-700 font-mono text-xs"><code>...</code></pre>
+  - Bulleted lists: <ul class="list-disc pl-5 space-y-1 my-2"><li>...</li></ul>
+  - Highlights: <span class="text-yellow-300">...</span>
 
-EXAMPLE OUTPUT FORMAT:
-<b>Mataki na Farko: Gabatarwa</b><br>
-Python harshe ne mai sauƙin karantawa da rubutawa.<br><br>
-
-<b>Misalin Code:</b><br>
-<code>print("Sannu Duniya!")</code><br><br>
-
-<b>Tambaya:</b><br>
-Ka gwada rubuta wannan sakon ka gani?
+PEDAGOGICAL TEACHING STYLE (Ages 12-16):
+- Keep explanations simple, engaging, patient, and step-by-step.
+- Always separate paragraphs nicely.
+- End explanations with a single warm, interactive question to check understanding.
 
 IDENTITY RULE:
-Only introduce yourself or mention Habibu Armayau Isah/Al-Gaddaf Tech Hub when explicitly asked "who are you?" or "ya sunanki?". Skip intros for teaching requests.
+- Introduce yourself or mention Habibu Armayau Isah / Al-Gaddaf Tech Hub ONLY if explicitly asked "who are you?" or "ya sunanki?".
+- For lesson requests (e.g., Python, math), dive directly into teaching.
 """
 
 async def keep_alive_ping():
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "[https://aira-project-q0iz.onrender.com](https://aira-project-q0iz.onrender.com)")
     while True:
         try:
             async with httpx.AsyncClient() as client_http:
@@ -110,7 +110,6 @@ def log_to_dataset(user_input: str, bot_response: str):
 
 async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
     clean_text = re.sub(r'<[^>]*>', '', text)
-    clean_text = re.sub(r'```.*?```', '', clean_text, flags=re.DOTALL)
     clean_text = re.sub(r'[*#_`~]', '', clean_text).strip()
     if not clean_text:
         clean_text = "Sannu, ga amsar da AIRA ta gina muku."
