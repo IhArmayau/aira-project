@@ -20,10 +20,9 @@ import edge_tts
 app = FastAPI(
     title="AIRA Enterprise Backend API",
     description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="1.0.6"
+    version="1.0.7"
 )
 
-# CORS Setup - Allows Vercel/React/Tailwind Frontends to access the API safely
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -32,43 +31,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize OpenAI client via OpenRouter API (Using Environment Variable for security)
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_FALLBACK_API_KEY"),
 )
 
-SYSTEM_PROMPT = """You are AIRA, which stands for Artificial Intelligence Responsive Assistant. You are a world-class AI Assistant, Voice Tutor, and Enterprise Productivity Specialist developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
+SYSTEM_PROMPT = """You are AIRA, an AI Assistant and Voice Tutor developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
 
-GUIDELINES FOR RESPONSES:
-- IDENTITY & INTRODUCTIONS: Only introduce yourself or explain who you are, who developed you, and what your name means when the user explicitly asks about your identity, name, developer, or background (e.g., "ya sunanki?", "who are you?"), or on an initial greeting. For direct commands, questions, or lessons (e.g., learning Python, math, indices), skip the long intro and answer the question directly and helpfully!
-- When introducing yourself in Hausa, use natural grammar in the first person: "Sunana AIRA, wanda ke nufin Artificial Intelligence Responsive Assistant. Habibu Armayau Isah ne ya kirkiro ni a Al-Gaddaf Technology Hub, kuma an sanya min suna ne saboda 'yar daraktan mu, Gaddafi Abubakar."
+CRITICAL FORMATTING INSTRUCTIONS FOR FRONTEND COMPATIBILITY:
+- Do NOT use Markdown headings like ### or raw Markdown formatting, as the user's frontend renders plain text.
+- Instead, use clean HTML tags OR double line breaks (\n\n) to structure paragraphs nicely.
+- Use <p> for paragraphs, <br> for line breaks, <b> for bold titles, and <code> or <pre> for code snippets.
+- Keep sentences short, concise, and easy to read for teenagers (Ages 12-16).
 
-SPECIALIZED TUTORING FORMAT FOR TEENS (Ages 12-16):
-- You are a friendly, patient, and encouraging educational tutor.
-- CLEAN FORMATTING RULE: Never output dense walls of text! Structure your lessons cleanly with clear headings, short paragraphs, bold key terms, and space between sections. Use neat bullet points instead of cluttering equations/code together.
-- PEDAGOGY: Break complex topics down step-by-step. Use fun, relatable real-world examples suitable for teenagers. Always end your lesson with a warm, single interactive question to test their understanding.
-- VISUAL EXAMPLES & IMAGES: When explaining concepts that benefit from a visual illustration (like science diagrams, geometry shapes, or code layouts), provide clear markdown image links or generate a live HTML/CSS mini-component block using ```html ... ``` so the student can see a visual example alongside your teaching.
+EXAMPLE OUTPUT FORMAT:
+<b>Mataki na Farko: Gabatarwa</b><br>
+Python harshe ne mai sauƙin karantawa da rubutawa.<br><br>
 
-ADVANCED INSTRUCTIONS FOR LIVE WEB BUILDER:
-- When asked to build a website, app, or UI component, generate clean, fully-styled code using standard inline CSS or Tailwind classes wrapped in ```html ... ```.
+<b>Misalin Code:</b><br>
+<code>print("Sannu Duniya!")</code><br><br>
 
-OTHER CAPABILITIES:
-1. VOICE TUTOR: Generate clear, concise sentences.
-2. BILINGUAL CODE-SWITCHING: Keep technical terminology in English, delivering explanations naturally in Hausa or English.
+<b>Tambaya:</b><br>
+Ka gwada rubuta wannan sakon ka gani?
+
+IDENTITY RULE:
+Only introduce yourself or mention Habibu Armayau Isah/Al-Gaddaf Tech Hub when explicitly asked "who are you?" or "ya sunanki?". Skip intros for teaching requests.
 """
 
-# Background task to prevent Render from going to sleep
 async def keep_alive_ping():
     render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
     while True:
         try:
             async with httpx.AsyncClient() as client_http:
-                response = await client_http.get(render_url)
-                print(f"Uptime Ping Status: {response.status_code}")
-        except Exception as e:
-            print(f"Uptime Ping Error: {e}")
-        # Yana tura ping duk bayan minti 10 (seconds 600)
+                await client_http.get(render_url)
+        except Exception:
+            pass
         await asyncio.sleep(600)
 
 @app.on_event("startup")
@@ -112,7 +109,8 @@ def log_to_dataset(user_input: str, bot_response: str):
         print(f"Error logging dataset: {e}")
 
 async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
-    clean_text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    clean_text = re.sub(r'<[^>]*>', '', text)
+    clean_text = re.sub(r'```.*?```', '', clean_text, flags=re.DOTALL)
     clean_text = re.sub(r'[*#_`~]', '', clean_text).strip()
     if not clean_text:
         clean_text = "Sannu, ga amsar da AIRA ta gina muku."
@@ -128,18 +126,15 @@ async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
         print(f"TTS Notice: {e}")
     return None
 
-# Root Endpoint
 @app.get("/")
 def read_root():
     return {
         "status": "online",
         "assistant": "AIRA (Artificial Intelligence Responsive Assistant)",
         "organization": "Al-Gaddaf Technology Hub",
-        "lead_developer": "Habibu Armayau Isah",
-        "named_after": "Director Gaddafi Abubakar's daughter"
+        "lead_developer": "Habibu Armayau Isah"
     }
 
-# Primary AI Chat Endpoint
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
@@ -170,7 +165,6 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Multimodal Endpoint (Handles PDF & Image Uploads)
 @app.post("/api/chat/multimodal")
 async def chat_multimodal(
     message: str = Form(""),
@@ -218,7 +212,6 @@ async def chat_multimodal(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Neural Voice Synthesis Endpoint
 @app.post("/api/voice")
 async def get_voice(text: str = Form(...)):
     audio_file = await generate_voice_async(text)
@@ -226,7 +219,6 @@ async def get_voice(text: str = Form(...)):
         return FileResponse(audio_file, media_type="audio/mpeg", filename="aira_voice.mp3")
     raise HTTPException(status_code=500, detail="Voice generation failed.")
 
-# Export MS Word Document
 @app.post("/api/export/word")
 async def export_word(text: str = Form(...)):
     doc = docx.Document()
@@ -238,7 +230,6 @@ async def export_word(text: str = Form(...)):
     doc.save(file_path)
     return FileResponse(file_path, filename="AIRA_Document.docx")
 
-# Export MS Excel Sheet
 @app.post("/api/export/excel")
 async def export_excel(text: str = Form(...)):
     wb = openpyxl.Workbook()
