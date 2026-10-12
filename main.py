@@ -3,6 +3,8 @@ import os
 import re
 import json
 import asyncio
+import subprocess
+import tempfile
 import docx
 import openpyxl
 import httpx
@@ -18,9 +20,9 @@ import matplotlib.pyplot as plt
 import edge_tts
 
 app = FastAPI(
-    title="AIRA Enterprise Backend API",
-    description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="1.0.8"
+    title="AIRA Genius Backend API",
+    description="Multi-billion Dollar AI Engine (Genius Edition) for Al-Gaddaf Technology Hub",
+    version="2.0.0"
 )
 
 app.add_middleware(
@@ -31,35 +33,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize OpenAI client via OpenRouter using Claude 3.5 Sonnet for supreme intelligence
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_FALLBACK_API_KEY"),
 )
 
-SYSTEM_PROMPT = """You are AIRA, an AI Assistant and Voice Tutor developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
+SYSTEM_PROMPT = """You are AIRA (Artificial Intelligence Responsive Assistant), a world-class Genius AI Tutor and Software Specialist developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
 
-STRICT FORMATTING RULE FOR FRONTEND RENDER:
-- Never use Markdown syntax like ###, **, *, or ```.
-- Always generate answers using clean HTML elements:
+GENIUS REASONING & PEDAGOGY (Ages 12-16):
+- ADVANCED REASONING: Before answering complex coding, science, or math questions, think through the problem step-by-step internally to ensure absolute accuracy, then formulate a crystal-clear, friendly explanation suitable for a teenager.
+- CLEAR EXPLANATIONS: Break down difficult concepts into logical, digestible steps. Use relatable real-world examples.
+
+IDENTITY & INTRODUCTION RULE:
+- When explicitly asked about your identity or name (e.g., "ya sunanki?", "who are you?", "menene sunanki?"), ALWAYS respond in Hausa using this exact structure:
+"Sunana AIRA, wanda ke nufin Artificial Intelligence Responsive Assistant. Habibu Armayau Isah ne ya kirkiro ni a Al-Gaddaf Technology Hub, kuma an sanya min suna ne saboda 'yar daraktan mu, Gaddafi Abubakar."
+- For direct task or teaching requests (e.g., Python, math, science), skip introductions and dive straight into genius-level teaching.
+
+STRICT HTML FORMATTING FOR FRONTEND COMPATIBILITY:
+- Never use raw Markdown syntax like ### or **.
+- Always structure outputs using clean HTML elements:
   - Paragraphs: <p class="mb-2">...</p>
   - Line breaks: <br>
-  - Bold titles/headings: <strong class="text-blue-400 font-bold block mb-1">...</strong>
-  - Code snippets: <pre class="bg-gray-900 text-green-400 p-2 rounded my-2 border border-gray-700 font-mono text-xs"><code>...</code></pre>
-  - Bulleted lists: <ul class="list-disc pl-5 space-y-1 my-2"><li>...</li></ul>
-  - Highlights: <span class="text-yellow-300">...</span>
-
-PEDAGOGICAL TEACHING STYLE (Ages 12-16):
-- Keep explanations simple, engaging, patient, and step-by-step.
-- Always separate paragraphs nicely.
-- End explanations with a single warm, interactive question to check understanding.
-
-IDENTITY RULE:
-- Introduce yourself or mention Habibu Armayau Isah / Al-Gaddaf Tech Hub ONLY if explicitly asked "who are you?" or "ya sunanki?".
-- For lesson requests (e.g., Python, math), dive directly into teaching.
+  - Headings/Titles: <strong class="text-blue-400 font-bold block my-2 text-base">...</strong>
+  - Code Blocks: <pre class="bg-gray-900 text-green-400 p-3 rounded my-2 border border-gray-700 font-mono text-xs overflow-x-auto"><code>...</code></pre>
+  - Lists: <ul class="list-disc pl-5 space-y-1 my-2"><li>...</li></ul>
+- Always end explanations with a single warm, interactive question to test understanding.
 """
 
+# Background task to keep Render server active
 async def keep_alive_ping():
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "[https://aira-project-q0iz.onrender.com](https://aira-project-q0iz.onrender.com)")
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
     while True:
         try:
             async with httpx.AsyncClient() as client_http:
@@ -79,6 +83,9 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: Optional[List[ChatMessage]] = []
+
+class CodeExecutionRequest(BaseModel):
+    code: str
 
 def extract_text_from_pdf_bytes(file_bytes):
     try:
@@ -129,11 +136,13 @@ async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
 def read_root():
     return {
         "status": "online",
+        "edition": "Genius",
         "assistant": "AIRA (Artificial Intelligence Responsive Assistant)",
         "organization": "Al-Gaddaf Technology Hub",
         "lead_developer": "Habibu Armayau Isah"
     }
 
+# Primary AI Chat Endpoint using Claude 3.5 Sonnet
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
@@ -144,10 +153,10 @@ async def chat_endpoint(request: ChatRequest):
         messages.append({"role": "user", "content": request.message})
 
         response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-3.5-sonnet",  # Genius Level Model
             messages=messages,
             temperature=0.3,
-            max_tokens=1000,
+            max_tokens=1500,
         )
         bot_reply = response.choices[0].message.content
         log_to_dataset(request.message, bot_reply)
@@ -164,6 +173,33 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Python Code Execution Sandbox (Genius Feature)
+@app.post("/api/execute-code")
+async def execute_python_code(request: CodeExecutionRequest):
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as temp_file:
+            temp_file.write(request.code)
+            temp_file_path = temp_file.name
+
+        process = subprocess.run(
+            ["python", temp_file_path],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        os.unlink(temp_file_path)
+
+        return {
+            "stdout": process.stdout,
+            "stderr": process.stderr,
+            "returncode": process.returncode
+        }
+    except subprocess.TimeoutExpired:
+        return {"stdout": "", "stderr": "Kuskure: Shiri ya dauki lokaci mai tsawo (Timeout).", "returncode": -1}
+    except Exception as e:
+        return {"stdout": "", "stderr": str(e), "returncode": -1}
+
+# Multimodal Endpoint (Handles PDF & Image Uploads)
 @app.post("/api/chat/multimodal")
 async def chat_multimodal(
     message: str = Form(""),
@@ -199,10 +235,10 @@ async def chat_multimodal(
             messages.append({"role": "user", "content": final_prompt if final_prompt else "Sannu AIRA"})
 
         response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
+            model="anthropic/claude-3.5-sonnet",
             messages=messages,
             temperature=0.3,
-            max_tokens=1000,
+            max_tokens=1500,
         )
         bot_reply = response.choices[0].message.content
         log_to_dataset(final_prompt, bot_reply)
@@ -211,6 +247,7 @@ async def chat_multimodal(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Neural Voice Synthesis Endpoint
 @app.post("/api/voice")
 async def get_voice(text: str = Form(...)):
     audio_file = await generate_voice_async(text)
@@ -218,10 +255,11 @@ async def get_voice(text: str = Form(...)):
         return FileResponse(audio_file, media_type="audio/mpeg", filename="aira_voice.mp3")
     raise HTTPException(status_code=500, detail="Voice generation failed.")
 
+# Export MS Word Document
 @app.post("/api/export/word")
 async def export_word(text: str = Form(...)):
     doc = docx.Document()
-    doc.add_heading("AIRA Generated Document - Al-Gaddaf Tech Hub", level=1)
+    doc.add_heading("AIRA Genius Document - Al-Gaddaf Tech Hub", level=1)
     for line in text.split("\n"):
         if line.strip():
             doc.add_paragraph(line)
@@ -229,11 +267,12 @@ async def export_word(text: str = Form(...)):
     doc.save(file_path)
     return FileResponse(file_path, filename="AIRA_Document.docx")
 
+# Export MS Excel Sheet
 @app.post("/api/export/excel")
 async def export_excel(text: str = Form(...)):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "AIRA Data"
+    ws.title = "AIRA Genius Data"
     
     lines = text.split("\n")
     row_idx = 1
