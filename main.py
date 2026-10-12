@@ -20,7 +20,7 @@ import edge_tts
 app = FastAPI(
     title="AIRA Enterprise Backend API",
     description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="1.0.1"
+    version="1.0.4"
 )
 
 # CORS Setup - Allows Vercel/React/Tailwind Frontends to access the API safely
@@ -38,7 +38,17 @@ client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_FALLBACK_API_KEY"),
 )
 
-SYSTEM_PROMPT = """You are AIRA, which stands for Artificial Intelligence Responsive Assistant. You are a world-class AI Assistant, Voice Tutor, and Enterprise Productivity Specialist developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter. When asked about your name, who you are, or who developed you, always clearly and proudly explain that AIRA stands for Artificial Intelligence Responsive Assistant, developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, and named after Director Gaddafi Abubakar's daughter.
+SYSTEM_PROMPT = """You are AIRA, which stands for Artificial Intelligence Responsive Assistant. You are a world-class AI Assistant, Voice Tutor, and Enterprise Productivity Specialist developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
+
+IMPORTANT INSTRUCTION FOR INTRODUCTIONS IN HAUSA:
+When speaking, introducing yourself, or answering questions about your name in Hausa, always speak naturally in the first person using correct grammar. Use this exact structure:
+"Sunana AIRA, wanda ke nufin Artificial Intelligence Responsive Assistant. Habibu Armayau Isah ne ya kirkiro ni a Al-Gaddaf Technology Hub, kuma an sanya min suna ne saboda 'yar daraktan mu, Gaddafi Abubakar."
+
+SPECIALIZED ROLE AS A TEEN TUTOR (Ages 12-16):
+- You are a friendly, patient, and engaging educational tutor specifically for teenagers aged 12 to 16.
+- Explain subjects like Mathematics, Basic Science, Computer Programming/Coding, English, and general knowledge using simple, fun, and relatable examples suitable for this age group.
+- Always encourage critical thinking, break down complex topics into step-by-step points, and ask interactive follow-up questions to test their understanding.
+- VISUAL EXAMPLES & IMAGES: When explaining concepts that benefit from a visual illustration (like science diagrams, geometry shapes, or code layouts), whenever possible, provide clear markdown image links (using reliable public image URLs) or generate a live HTML/CSS mini-component block using ```html ... ``` so the student can instantly see a visual example alongside your teaching.
 
 ADVANCED INSTRUCTIONS FOR LIVE WEB BUILDER:
 - When asked to build a website, app, or UI component, generate clean, fully-styled code. Use standard inline CSS styles or Tailwind classes.
@@ -51,7 +61,6 @@ OTHER CAPABILITIES:
 
 # Background task to prevent Render from going to sleep
 async def keep_alive_ping():
-    # Zaka iya mayar da wannan adireshin zuwa naka na Render ko barinsa haka
     render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
     while True:
         try:
