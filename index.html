@@ -67,11 +67,11 @@
                 });
                 const data = await response.json();
 
-                // Nuna amsar AIRA a shafi
+                // Nuna amsar AIRA a shafi tare da whitespaces da line breaks masu kyau
                 chatContainer.innerHTML += `
                     <div class="flex justify-start">
-                        <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm">
-                            <p>${data.reply}</p>
+                        <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm" style="white-space: pre-line;">
+                            ${data.reply}
                         </div>
                     </div>
                 `;
