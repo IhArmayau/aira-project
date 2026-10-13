@@ -19,7 +19,7 @@ from pypdf import PdfReader
 app = FastAPI(
     title="AIRA Backend API",
     description="Multi-billion Dollar AI Engine & Problem Solver for Al-Gaddaf Technology Hub",
-    version="2.0.8"
+    version="2.0.9"
 )
 
 app.add_middleware(
@@ -139,7 +139,8 @@ async def generate_voice_async(text: str):
     if not clean_text:
         clean_text = "Sannu, ga amsar da AIRA ta gina muku."
     
-    clean_text = clean_text[:200]
+    # An ƙara iyakar haruffa zuwa 600 domin muryar ta karanta mafi yawan amsoshi su gama
+    clean_text = clean_text[:600]
     encoded_text = urllib.parse.quote(clean_text)
     
     target_lang = "en" if any(ord(c) < 128 and c.isalpha() for c in clean_text[:10]) else "ha"
