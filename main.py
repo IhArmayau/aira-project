@@ -19,7 +19,7 @@ import edge_tts
 app = FastAPI(
     title="AIRA Genius Backend API",
     description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="2.0.3"
+    version="2.0.4"
 )
 
 app.add_middleware(
