@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIRA Genius - Al-Gaddaf Technology Hub</title>
+    <title>AIRA - Al-Gaddaf Technology Hub</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes avatar-pulse {
@@ -23,7 +23,7 @@
     <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center border-b border-gray-700">
         <div>
             <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">
-                AIRA <span class="text-xs bg-purple-600 px-2 py-0.5 rounded text-white font-normal">Genius v2.0.4</span>
+                AIRA <span class="text-xs bg-purple-600 px-2 py-0.5 rounded text-white font-normal">Genius v2.0.5</span>
             </h1>
             <p class="text-xs text-gray-400">Al-Gaddaf Technology Hub</p>
         </div>
@@ -51,7 +51,7 @@
     <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl mx-auto w-full">
         <div class="flex justify-start">
             <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm leading-relaxed shadow-md">
-                <p>Sannu! Ni ce <strong>AIRA</strong> (Genius Edition), abokiyar aikinka ta fasahar zamani daga Al-Gaddaf Technology Hub. Me zan iya taimaka maka da shi yau?</p>
+                <p>Sannu! Ni ce <strong>AIRA</strong> , abokiyar aikinka ta fasahar zamani daga Al-Gaddaf Technology Hub. Me zan iya taimaka maka da shi yau?</p>
             </div>
         </div>
     </div>
@@ -81,42 +81,35 @@
             return plainText.replace(/[\n\r]+/g, ' ').trim();
         }
 
-        async function playVoice(rawText) {
+        // Amfani da Browser Speech Synthesis API don guje wa TTS 403 Errors a Render
+        function playVoice(rawText) {
             const cleanText = cleanTextForAudio(rawText);
             if (!cleanText) return;
 
-            try {
-                avatarCore.classList.add('speaking-active');
-                voiceStatus.classList.remove('hidden');
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
 
-                const formData = new FormData();
-                formData.append("text", cleanText);
+                const utterance = new SpeechSynthesisUtterance(cleanText);
+                utterance.lang = /[a-zA-Z]/g.test(cleanText) && !/[ƙɗɓriyṣḥẓ]/i.test(cleanText) ? 'en-US' : 'ha-NG';
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
 
-                const res = await fetch(`${API_URL}/api/voice`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!res.ok) throw new Error("Voice failed");
-
-                const blob = await res.blob();
-                const audioUrl = URL.createObjectURL(blob);
-                const audio = new Audio(audioUrl);
-
-                audio.onended = () => {
-                    avatarCore.classList.remove('speaking-active');
-                    voiceStatus.classList.add('hidden');
+                utterance.onstart = () => {
+                    avatarCore.classList.add('speaking-active');
+                    voiceStatus.classList.remove('hidden');
                 };
-                audio.onerror = () => {
+
+                utterance.onend = () => {
                     avatarCore.classList.remove('speaking-active');
                     voiceStatus.classList.add('hidden');
                 };
 
-                await audio.play();
-            } catch (err) {
-                console.error("Audio error:", err);
-                avatarCore.classList.remove('speaking-active');
-                voiceStatus.classList.add('hidden');
+                utterance.onerror = () => {
+                    avatarCore.classList.remove('speaking-active');
+                    voiceStatus.classList.add('hidden');
+                };
+
+                window.speechSynthesis.speak(utterance);
             }
         }
 
@@ -159,9 +152,8 @@
                 chatContainer.appendChild(msgDiv);
                 chatContainer.scrollTop = chatContainer.scrollHeight;
 
-                const textToSpeak = botReply;
                 msgDiv.querySelector('.voice-btn').addEventListener('click', () => {
-                    playVoice(textToSpeak);
+                    playVoice(botReply);
                 });
 
                 chatHistory.push({ role: "user", content: text });
