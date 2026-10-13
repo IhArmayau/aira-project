@@ -199,7 +199,7 @@
             micBtn.style.display = 'none';
         }
 
-        // Improved Browser Speech Synthesis (Female Voice & Clear Audio)
+        // Optimized Browser Speech Synthesis Engine
         function playBrowserVoice(rawHtml) {
             if (!('speechSynthesis' in window)) return;
             window.speechSynthesis.cancel();
@@ -213,17 +213,20 @@
             const isEnglish = /^[A-Za-z0-9\s.,!?-]+$/.test(plainText.slice(0, 20));
             utterance.lang = isEnglish ? 'en-US' : 'ha-NG';
             
-            // Gyara sauri da kuma sautin muryar domin ta fi fitowa da kyau (muryar mace)
-            utterance.rate = 1.0;
-            utterance.pitch = 1.3;
+            utterance.rate = 0.95; // Sauri mai daɗin sauraro
+            utterance.pitch = 1.2;  // Ingantaccen matakin sauti
 
-            // Zaɓar muryar mace da ke cikin na'urar ta atomatik
+            // Zaɓar mafi kyawun muryar da ke cikin na'urar
             const voices = window.speechSynthesis.getVoices();
-            const preferredVoice = voices.find(v => 
-                (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('susan') || v.name.toLowerCase().includes('victoria'))
+            const bestVoice = voices.find(v => 
+                v.name.toLowerCase().includes('female') || 
+                v.name.toLowerCase().includes('zira') || 
+                v.name.toLowerCase().includes('google') || 
+                v.name.toLowerCase().includes('susan') || 
+                v.name.toLowerCase().includes('natural')
             );
-            if (preferredVoice) {
-                utterance.voice = preferredVoice;
+            if (bestVoice) {
+                utterance.voice = bestVoice;
             }
 
             utterance.onstart = () => {
