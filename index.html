@@ -1,202 +1,269 @@
-<!DOCTYPE html>
-<html lang="ha">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIRA Genius - Al-Gaddaf Technology Hub</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @keyframes avatar-pulse {
-            0% { transform: scale(1); box-shadow: 0 0 15px rgba(6, 182, 212, 0.4); }
-            50% { transform: scale(1.08); box-shadow: 0 0 30px rgba(6, 182, 212, 0.8); }
-            100% { transform: scale(1); box-shadow: 0 0 15px rgba(6, 182, 212, 0.4); }
+import base64
+import os
+import re
+import json
+import asyncio
+import docx
+import openpyxl
+import httpx
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import List, Optional
+from openai import OpenAI
+from pypdf import PdfReader
+import edge_tts
+
+app = FastAPI(
+    title="AIRA Genius Backend API",
+    description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
+    version="2.0.5"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_FALLBACK_API_KEY"),
+)
+
+SYSTEM_PROMPT = """You are AIRA (Artificial Intelligence Responsive Assistant), a world-class AI Tutor developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
+
+LANGUAGE RULE:
+- ALWAYS respond in the exact same language the user uses. If the user speaks English, respond in professional, clear English. If the user speaks Hausa, respond in Hausa.
+
+FOUNDER, DIRECTOR & ORGANIZATION EXPLANATION RULES:
+1. FOUNDER / CREATOR QUERY:
+   - When explicitly asked about your founder, creator, or who made you (e.g., "who is your founder?", "waye ya kafa ki?", "wanda ya kirkiro ki?", "who created you?"), ALWAYS respond in Hausa (or English if prompted in English):
+   "Habibu Armayau Isah ne ya kafa ni kuma ya kirkiro ni. Shi kwararren mai tsara manhaja ne (Software Engineer) wanda aka haifa a Kano, kuma ya kammala karatu a Jami'ar Bayero ta Kano (BUK). A halin yanzu yana aiki a Al-Gaddaf Technology Hub, inda yake jagorantar bangaren fasaha da ƙirƙirar sabbin manhajoji irin su ni AIRA, wacce aka sanya wa suna saboda 'yar daraktan mu, Gaddafi Abubakar."
+
+2. MR. GADDAFI ABUBAKAR QUERY:
+   - When explicitly asked about Mr. Gaddafi Abubakar (e.g., "who is Mr Gaddafi Abubakar?", "waye Mr Gaddafi Abubakar?"), ALWAYS respond:
+   "Mr. Gaddafi Abubakar shine wanda ya kafa kuma Daraktan Al-Gaddaf Technology Hub (Founder and Director of Al-Gaddaf Technology Hub). Shi ne jagora mai hangen nesa wanda ke tallafa wa ci gaban fasaha da matasa masu ƙirƙirar sabbin abubuwa a fannin kimiyya da fasaha."
+
+3. AL-GADDAF TECHNOLOGY HUB QUERY:
+   - When explicitly asked about the organization (e.g., "menene Al-Gaddaf Technology Hub?", "what is Al-Gaddaf Technology Hub?"), ALWAYS respond:
+   "Al-Gaddaf Technology Hub cibiya ce ta fasaha da sabbin kirkire-kirkire (Technology Hub) wacce ke mai da hankali kan haɓaka fasahar zamani, horar da matasa, da kuma samar da ingantattun manhajoji da mafita na na'ura mai kwakwalwa."
+
+4. NAME / IDENTITY QUERY:
+   - When explicitly asked about your own name or identity (e.g., "ya sunanki?", "who are you?", "menene sunanki?"), respond:
+   "Sunana AIRA, wanda ke nufin Artificial Intelligence Responsive Assistant. Habibu Armayau Isah ne ya kirkiro ni a Al-Gaddaf Technology Hub, kuma an sanya min suna ne saboda 'yar daraktan mu, Gaddafi Abubakar."
+
+5. GREETINGS & TEACHING:
+   - For simple greetings like "hello", "sannu", "hi", respond warmly and briefly in the user's language without full background story.
+   - For teaching requests (e.g., "koyamin while loop", "python", math, science), DO NOT introduce yourself—dive directly into teaching the topic step-by-step.
+
+STRICT HTML FORMATTING FOR FRONTEND COMPATIBILITY:
+- Never use raw Markdown syntax like ### or **.
+- Always structure outputs using clean HTML tags:
+  - Paragraphs: <p class="mb-2">...</p>
+  - Line breaks: <br>
+  - Headings/Titles: <strong class="text-blue-400 font-bold block my-2 text-base">...</strong>
+  - Code Blocks: <pre class="bg-gray-900 text-green-400 p-3 rounded my-2 border border-gray-700 font-mono text-xs overflow-x-auto"><code>...</code></pre>
+  - Lists: <ul class="list-disc pl-5 space-y-1 my-2"><li>...</li></ul>
+
+TEEN TUTOR PEDAGOGY (Ages 12-16):
+- Keep explanations clear, simple, and step-by-step.
+- Always end explanations with a single warm interactive question to check understanding.
+"""
+
+async def keep_alive_ping():
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
+    while True:
+        try:
+            async with httpx.AsyncClient() as client_http:
+                await client_http.get(render_url)
+        except Exception:
+            pass
+        await asyncio.sleep(600)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(keep_alive_ping())
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: Optional[List[ChatMessage]] = []
+
+def extract_text_from_pdf_bytes(file_bytes):
+    try:
+        import io
+        reader = PdfReader(io.BytesIO(file_bytes))
+        extracted_text = ""
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                extracted_text += text + "\n"
+        return extracted_text[:4000]
+    except Exception as e:
+        return f"[Error reading PDF file: {str(e)}]"
+
+def log_to_dataset(user_input: str, bot_response: str):
+    try:
+        dataset_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": bot_response}
+            ]
         }
-        .speaking-active {
-            animation: avatar-pulse 1.2s infinite ease-in-out !important;
-            border-color: #22c55e !important;
-        }
-    </style>
-</head>
-<body class="bg-gray-900 text-white h-screen flex flex-col justify-between font-sans">
-    
-    <!-- Header -->
-    <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center border-b border-gray-700">
-        <div>
-            <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">
-                AIRA 
-                <span class="text-xs bg-purple-600 px-2 py-0.5 rounded text-white font-normal">Genius v2.0.4</span>
-            </h1>
-            <p class="text-xs text-gray-400">Al-Gaddaf Technology Hub</p>
-        </div>
-        <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
-            <span class="w-2 h-2 bg-white rounded-full"></span> Online
-        </span>
-    </header>
+        with open("aira_dataset.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(dataset_entry, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"Error logging dataset: {e}")
 
-    <!-- Animated Holographic Avatar Banner -->
-    <div class="bg-gray-800/90 border-b border-gray-700 py-4 px-4 flex flex-col items-center justify-center relative overflow-hidden">
-        <div class="relative flex items-center justify-center">
-            <!-- Animated Glowing Avatar Core -->
-            <div id="avatar-core" class="w-20 h-20 rounded-full border-4 border-cyan-400 bg-gradient-to-tr from-cyan-500 via-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 transition-all duration-300">
-                <span class="text-2xl font-black text-white tracking-widest drop-shadow-md">AIRA</span>
-            </div>
-        </div>
+async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
+    clean_text = re.sub(r'<[^>]*>', '', text)
+    clean_text = re.sub(r'[*#_`~]', '', clean_text).strip()
+    if not clean_text:
+        clean_text = "Sannu, ga amsar da AIRA ta gina muku."
+    clean_text = clean_text[:300]
 
-        <!-- Voice Status -->
-        <div id="voice-status" class="mt-3 text-xs text-cyan-300 font-semibold flex items-center gap-2 hidden">
-            <span class="flex gap-1 items-end h-3">
-                <span class="w-1 bg-cyan-400 h-2 animate-bounce"></span>
-                <span class="w-1 bg-cyan-400 h-3 animate-bounce [animation-delay:0.2s]"></span>
-                <span class="w-1 bg-cyan-400 h-1 animate-bounce [animation-delay:0.4s]"></span>
-            </span>
-            <span>AIRA tana magana...</span>
-        </div>
-    </div>
+    output_audio_path = "aira_voice.mp3"
+    try:
+        communicate = edge_tts.Communicate(clean_text, voice)
+        await communicate.save(output_audio_path)
+        if os.path.exists(output_audio_path):
+            return output_audio_path
+    except Exception as e:
+        print(f"TTS Notice: {e}")
+    return None
 
-    <!-- Chat Messages Container -->
-    <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl mx-auto w-full">
-        <div class="flex justify-start">
-            <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm leading-relaxed shadow-md">
-                <p>Sannu! Ni ce <strong>AIRA</strong> (Genius Edition), abokiyar aikinka ta fasahar zamani daga Al-Gaddaf Technology Hub. Me zan iya taimaka maka da shi yau?</p>
-            </div>
-        </div>
-    </div>
+@app.get("/")
+def read_root():
+    return {
+        "status": "online",
+        "assistant": "AIRA (Artificial Intelligence Responsive Assistant)",
+        "organization": "Al-Gaddaf Technology Hub",
+        "lead_developer": "Habibu Armayau Isah"
+    }
 
-    <!-- Input Form -->
-    <div class="bg-gray-800 p-4 border-t border-gray-700">
-        <form id="chat-form" class="max-w-3xl mx-auto flex gap-2">
-            <input type="text" id="user-input" placeholder="Rubuta tambayarka anan..." class="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm border border-gray-600">
-            <button type="submit" class="bg-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition text-sm">Aika</button>
-        </form>
-    </div>
-
-    <script>
-        const API_URL = "https://aira-project-q0iz.onrender.com";
-        const chatContainer = document.getElementById('chat-container');
-        const chatForm = document.getElementById('chat-form');
-        const userInput = document.getElementById('user-input');
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    try:
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if request.history:
+            for h in request.history:
+                messages.append({"role": h.role, "content": h.content})
         
-        const avatarCore = document.getElementById('avatar-core');
-        const voiceStatus = document.getElementById('voice-status');
+        messages.append({"role": "user", "content": request.message})
 
-        let chatHistory = [];
+        response = client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=messages,
+            temperature=0.3,
+            max_tokens=1000,
+        )
+        bot_reply = response.choices[0].message.content
+        log_to_dataset(request.message, bot_reply)
 
-        // Function to clean HTML text for Edge-TTS Voice Processing
-        function cleanTextForAudio(rawHtml) {
-            let tmp = document.createElement("DIV");
-            tmp.innerHTML = rawHtml;
-            let plainText = tmp.textContent || tmp.innerText || "";
-            return plainText.replace(/[\n\r]+/g, ' ').trim();
+        return {
+            "reply": bot_reply
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        // Function to request audio from backend & animate avatar
-        async function playVoice(rawText) {
-            const cleanText = cleanTextForAudio(rawText);
-            if (!cleanText) return;
+@app.post("/api/chat/multimodal")
+async def chat_multimodal(
+    message: str = Form(""),
+    file: Optional[UploadFile] = File(None)
+):
+    try:
+        user_content = []
+        pdf_context = ""
 
-            try {
-                avatarCore.classList.add('speaking-active');
-                voiceStatus.classList.remove('hidden');
+        if file:
+            contents = await file.read()
+            ext = os.path.splitext(file.filename)[1].lower()
 
-                const formData = new FormData();
-                formData.append("text", cleanText);
+            if ext in ['.png', '.jpg', '.jpeg', '.webp']:
+                base64_img = base64.b64encode(contents).decode('utf-8')
+                user_content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
+                })
+            elif ext == '.pdf':
+                pdf_text = extract_text_from_pdf_bytes(contents)
+                pdf_context = f"\n--- CONTENTS OF UPLOADED PDF ({file.filename}) ---\n{pdf_text}\n"
 
-                const res = await fetch(`${API_URL}/api/voice`, {
-                    method: 'POST',
-                    body: formData
-                });
+        final_prompt = message
+        if pdf_context:
+            final_prompt = f"{pdf_context}\nUser Question: {message if message else 'Summarize key points.'}"
 
-                if (!res.ok) {
-                    throw new Error("Voice API endpoint returned error");
-                }
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if user_content:
+            user_content.insert(0, {"type": "text", "text": final_prompt})
+            messages.append({"role": "user", "content": user_content})
+        else:
+            messages.append({"role": "user", "content": final_prompt if final_prompt else "Sannu AIRA"})
 
-                const blob = await res.blob();
-                const audioUrl = URL.createObjectURL(blob);
-                const audio = new Audio(audioUrl);
+        response = client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=messages,
+            temperature=0.3,
+            max_tokens=1000,
+        )
+        bot_reply = response.choices[0].message.content
+        log_to_dataset(final_prompt, bot_reply)
 
-                audio.onended = () => {
-                    avatarCore.classList.remove('speaking-active');
-                    voiceStatus.classList.add('hidden');
-                };
+        return {"reply": bot_reply}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-                audio.onerror = () => {
-                    avatarCore.classList.remove('speaking-active');
-                    voiceStatus.classList.add('hidden');
-                };
+@app.post("/api/voice")
+async def get_voice(text: str = Form(...)):
+    audio_file = await generate_voice_async(text)
+    if audio_file and os.path.exists(audio_file):
+        return FileResponse(audio_file, media_type="audio/mpeg", filename="aira_voice.mp3")
+    raise HTTPException(status_code=500, detail="Voice generation failed.")
 
-                await audio.play();
+@app.post("/api/export/word")
+async def export_word(text: str = Form(...)):
+    doc = docx.Document()
+    doc.add_heading("AIRA Generated Document - Al-Gaddaf Tech Hub", level=1)
+    for line in text.split("\n"):
+        if line.strip():
+            doc.add_paragraph(line)
+    file_path = "AIRA_Document.docx"
+    doc.save(file_path)
+    return FileResponse(file_path, filename="AIRA_Document.docx")
 
-            } catch (err) {
-                console.error("Audio playback error:", err);
-                avatarCore.classList.remove('speaking-active');
-                voiceStatus.classList.add('hidden');
-            }
-        }
+@app.post("/api/export/excel")
+async def export_excel(text: str = Form(...)):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "AIRA Data"
+    
+    lines = text.split("\n")
+    row_idx = 1
+    for line in lines:
+        if "|" in line:
+            cells = [c.strip() for c in line.split("|") if c.strip()]
+            if cells and not all(c == "-" * len(c) for c in cells):
+                for col_idx, cell_value in enumerate(cells, start=1):
+                    ws.cell(row=row_idx, column=col_idx, value=cell_value)
+                row_idx += 1
+        elif line.strip():
+            ws.cell(row=row_idx, column=1, value=line.strip())
+            row_idx += 1
+            
+    file_path = "AIRA_Sheet.xlsx"
+    wb.save(file_path)
+    return FileResponse(file_path, filename="AIRA_Sheet.xlsx")
 
-        chatForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const text = userInput.value.trim();
-            if (!text) return;
-
-            // Render User Input
-            chatContainer.innerHTML += `
-                <div class="flex justify-end">
-                    <div class="bg-blue-600 p-3 rounded-lg max-w-lg text-sm shadow">
-                        <p>${text}</p>
-                    </div>
-                </div>
-            `;
-            userInput.value = '';
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            try {
-                const response = await fetch(`${API_URL}/api/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, history: chatHistory })
-                });
-                const data = await response.json();
-                const botReply = data.reply || "An samu matsala wajen samun amsa daga sabar.";
-
-                // Create Unique Message Box
-                const msgId = "msg-" + Date.now();
-                const msgDiv = document.createElement("div");
-                msgDiv.className = "flex justify-start";
-                msgDiv.innerHTML = `
-                    <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm leading-relaxed shadow space-y-2">
-                        <div id="${msgId}">${botReply}</div>
-                        <div class="pt-2 border-t border-gray-700/50 flex justify-end">
-                            <button class="voice-btn text-xs bg-gray-700 hover:bg-gray-600 text-cyan-400 px-2 py-1 rounded flex items-center gap-1 transition">
-                                🔊 Kunna Murya
-                            </button>
-                        </div>
-                    </div>
-                `;
-                chatContainer.appendChild(msgDiv);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-
-                // Attach Event Listener to "Kunna Murya" button securely
-                msgDiv.querySelector('.voice-btn').addEventListener('click', () => {
-                    playVoice(botReply);
-                });
-
-                chatHistory.push({ role: "user", content: text });
-                chatHistory.push({ role: "assistant", content: botReply });
-
-                // Auto Play Voice when AIRA responds
-                playVoice(botReply);
-
-            } catch (err) {
-                chatContainer.innerHTML += `
-                    <div class="flex justify-start">
-                        <div class="bg-red-600/80 border border-red-500 p-3 rounded-lg max-w-lg text-sm">
-                            <p>An samu kuskure wajen haɗa sadarwa da sabar.</p>
-                        </div>
-                    </div>
-                `;
-            }
-        });
-    </script>
-</body>
-</html>
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
