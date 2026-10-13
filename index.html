@@ -3,12 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIRA - Al-Gaddaf Technology Hub</title>
+    <title>AIRA - Al-Gaddaf Technology Hub (Genius Edition)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MathJax for Mathematical Equations -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- Mermaid.js for Diagrams & Flowcharts -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
     <style>
         @keyframes avatar-pulse {
             0% { transform: scale(1); box-shadow: 0 0 15px rgba(6, 182, 212, 0.4); }
-            50% { transform: scale(1.08); box-shadow: 0 0 30px rgba(6, 182, 212, 0.8); }
+            50% { transform: scale(1.08); box-shadow: 0 0 35px rgba(34, 197, 94, 0.8); }
             100% { transform: scale(1); box-shadow: 0 0 15px rgba(6, 182, 212, 0.4); }
         }
         .speaking-active {
@@ -23,13 +31,18 @@
     <header class="bg-gray-800 p-4 shadow-md flex justify-between items-center border-b border-gray-700">
         <div>
             <h1 class="text-xl font-bold text-blue-400 flex items-center gap-2">
-                AIRA
+                AIRA <span class="text-xs bg-purple-600 px-2 py-0.5 rounded text-white font-normal">Super Engine</span>
             </h1>
             <p class="text-xs text-gray-400">Al-Gaddaf Technology Hub</p>
         </div>
-        <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
-            <span class="w-2 h-2 bg-white rounded-full"></span> Online
-        </span>
+        <div class="flex items-center gap-3">
+            <button id="clear-history-btn" class="text-xs bg-red-600/80 hover:bg-red-700 text-white px-2.5 py-1 rounded transition" title="Goge Tarihin Hira">
+                Sabon Zance 🗑️
+            </button>
+            <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full animate-pulse flex items-center gap-1">
+                <span class="w-2 h-2 bg-white rounded-full"></span> Online
+            </span>
+        </div>
     </header>
 
     <!-- Holographic Avatar Banner -->
@@ -51,7 +64,7 @@
     <div id="chat-container" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl mx-auto w-full">
         <div class="flex justify-start">
             <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm leading-relaxed shadow-md">
-                <p>Sannu! Ni ce <strong>AIRA</strong>, abokiyar aikinka ta fasahar zamani da warware matsaloli daga Al-Gaddaf Technology Hub. Me zan iya taimaka maka da shi yau?</p>
+                <p>Sannu! Ni ce <strong>AIRA</strong>, babban injin fasahar zamani da warware matsaloli daga Al-Gaddaf Technology Hub. Yanzu ina da ƙarin ƙarfin gudanar da lamba, zane-zane, da muryar zamani. Me zan iya taimaka maka da shi yau?</p>
             </div>
         </div>
     </div>
@@ -78,8 +91,8 @@
                 🎙️
             </button>
 
-            <!-- Text Input with Improved Placeholder -->
-            <input type="text" id="user-input" placeholder="Tambayi AIRA ko ka manna lamba (Code/Bug) a nan..." class="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm border border-gray-600 placeholder-gray-400">
+            <!-- Text Input -->
+            <input type="text" id="user-input" placeholder="Tambayi AIRA ko ka rubuta lamba (Code/Bug) a nan..." class="flex-1 bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm border border-gray-600 placeholder-gray-400">
             
             <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg font-semibold transition text-sm">Aika</button>
         </form>
@@ -97,10 +110,57 @@
         const fileNameSpan = document.getElementById('file-name');
         const removeFileBtn = document.getElementById('remove-file-btn');
         const micBtn = document.getElementById('mic-btn');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
 
-        let chatHistory = [];
+        let chatHistory = JSON.parse(localStorage.getItem('aira_history')) || [];
         let selectedFile = null;
-        let currentAudio = null;
+
+        // Render Saved History on Load
+        function renderHistory() {
+            if (chatHistory.length > 0) {
+                // Clear initial greeting if history exists
+                chatContainer.innerHTML = '';
+                chatHistory.forEach(msg => {
+                    const isUser = msg.role === 'user';
+                    const div = document.createElement('div');
+                    div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+                    
+                    if (isUser) {
+                        div.innerHTML = `<div class="bg-blue-600 p-3 rounded-lg max-w-lg text-sm shadow"><p>${msg.content}</p></div>`;
+                    } else {
+                        div.innerHTML = `
+                            <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm leading-relaxed shadow space-y-2">
+                                <div>${msg.content}</div>
+                                <div class="pt-2 border-t border-gray-700/50 flex justify-end">
+                                    <button class="voice-btn text-xs bg-gray-700 hover:bg-gray-600 text-cyan-400 px-2 py-1 rounded flex items-center gap-1 transition">
+                                        🔊 Kunna Murya
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        div.querySelector('.voice-btn').addEventListener('click', () => playBrowserVoice(msg.content));
+                    }
+                    chatContainer.appendChild(div);
+                });
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+        renderHistory();
+
+        // Clear History
+        clearHistoryBtn.addEventListener('click', () => {
+            if (confirm("Kuna son share duk tarihin wannan hirar?")) {
+                localStorage.removeItem('aira_history');
+                chatHistory = [];
+                chatContainer.innerHTML = `
+                    <div class="flex justify-start">
+                        <div class="bg-gray-800 border border-gray-700 p-3 rounded-lg max-w-lg text-sm leading-relaxed shadow-md">
+                            <p>An share tsohuwar hira. Me zan iya taimaka maka da shi yau?</p>
+                        </div>
+                    </div>
+                `;
+            }
+        });
 
         // Handle File Selection
         fileInput.addEventListener('change', (e) => {
@@ -130,77 +190,77 @@
             });
 
             recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                userInput.value = transcript;
+                userInput.value = event.results[0][0].transcript;
                 micBtn.classList.remove('bg-red-600');
             };
 
-            recognition.onerror = () => {
-                micBtn.classList.remove('bg-red-600');
-            };
-
-            recognition.onend = () => {
-                micBtn.classList.remove('bg-red-600');
-            };
+            recognition.onerror = () => micBtn.classList.remove('bg-red-600');
+            recognition.onend = () => micBtn.classList.remove('bg-red-600');
         } else {
             micBtn.style.display = 'none';
         }
 
-        // Clean HTML tags for Voice Audio Generation
-        function cleanTextForAudio(rawHtml) {
+        // 1. Browser Speech Synthesis (High Performance Voice Engine)
+        function playBrowserVoice(rawHtml) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+
             let tmp = document.createElement("DIV");
             tmp.innerHTML = rawHtml;
-            let plainText = tmp.textContent || tmp.innerText || "";
-            return plainText.replace(/[\n\r]+/g, ' ').trim();
-        }
+            let plainText = (tmp.textContent || tmp.innerText || "").replace(/[\n\r]+/g, ' ').trim();
+            if (!plainText) return;
 
-        // Amfani da Backend Google TTS Endpoint don Muryar Hausa da Turanci
-        async function playVoice(rawText) {
-            const cleanText = cleanTextForAudio(rawText);
-            if (!cleanText) return;
+            const utterance = new SpeechSynthesisUtterance(plainText);
+            // Auto-detect language
+            const isEnglish = /^[A-Za-z0-9\s.,!?-]+$/.test(plainText.slice(0, 20));
+            utterance.lang = isEnglish ? 'en-US' : 'ha-NG';
+            utterance.rate = 1.0;
 
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio = null;
-            }
-
-            try {
+            utterance.onstart = () => {
                 avatarCore.classList.add('speaking-active');
                 voiceStatus.classList.remove('hidden');
+            };
 
-                const formData = new FormData();
-                formData.append('text', cleanText);
-
-                const response = await fetch(`${API_URL}/api/voice`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const audioBlob = await response.blob();
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    currentAudio = new Audio(audioUrl);
-
-                    currentAudio.onended = () => {
-                        avatarCore.classList.remove('speaking-active');
-                        voiceStatus.classList.add('hidden');
-                    };
-
-                    currentAudio.onerror = () => {
-                        avatarCore.classList.remove('speaking-active');
-                        voiceStatus.classList.add('hidden');
-                    };
-
-                    await currentAudio.play();
-                } else {
-                    avatarCore.classList.remove('speaking-active');
-                    voiceStatus.classList.add('hidden');
-                }
-            } catch (err) {
-                console.error("Voice Play Error:", err);
+            utterance.onend = () => {
                 avatarCore.classList.remove('speaking-active');
                 voiceStatus.classList.add('hidden');
-            }
+            };
+
+            utterance.onerror = () => {
+                avatarCore.classList.remove('speaking-active');
+                voiceStatus.classList.add('hidden');
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Code execution simulation or copy toolbar injector
+        function enhanceCodeBlocks(container) {
+            container.querySelectorAll('pre').forEach(pre => {
+                if (pre.querySelector('.code-toolbar')) return;
+                const toolbar = document.createElement('div');
+                toolbar.className = 'code-toolbar flex justify-between items-center bg-gray-800 px-3 py-1 text-xs border-b border-gray-700 text-gray-300';
+                
+                const langSpan = document.createElement('span');
+                langSpan.textContent = 'Code Snippet';
+                
+                const btnGroup = document.createElement('div');
+                btnGroup.className = 'flex gap-2';
+
+                const copyBtn = document.createElement('button');
+                copyBtn.textContent = 'Copy 📋';
+                copyBtn.className = 'hover:text-cyan-400 transition';
+                copyBtn.onclick = () => {
+                    navigator.clipboard.writeText(pre.querySelector('code').innerText);
+                    copyBtn.textContent = 'Copied! ✅';
+                    setTimeout(() => copyBtn.textContent = 'Copy 📋', 2000);
+                };
+
+                btnGroup.appendChild(copyBtn);
+                toolbar.appendChild(langSpan);
+                toolbar.appendChild(btnGroup);
+                pre.insertBefore(toolbar, pre.firstChild);
+            });
         }
 
         // Form Submit Event
@@ -231,16 +291,11 @@
 
             try {
                 let response, data;
-
                 if (fileToSend) {
                     const formData = new FormData();
                     formData.append('message', text);
                     formData.append('file', fileToSend);
-
-                    response = await fetch(`${API_URL}/api/chat/multimodal`, {
-                        method: 'POST',
-                        body: formData
-                    });
+                    response = await fetch(`${API_URL}/api/chat/multimodal`, { method: 'POST', body: formData });
                 } else {
                     response = await fetch(`${API_URL}/api/chat`, {
                         method: 'POST',
@@ -265,16 +320,16 @@
                     </div>
                 `;
                 chatContainer.appendChild(msgDiv);
+                enhanceCodeBlocks(msgDiv);
                 chatContainer.scrollTop = chatContainer.scrollHeight;
 
-                msgDiv.querySelector('.voice-btn').addEventListener('click', () => {
-                    playVoice(botReply);
-                });
+                msgDiv.querySelector('.voice-btn').addEventListener('click', () => playBrowserVoice(botReply));
 
                 chatHistory.push({ role: "user", content: text || "Uploaded file analysis" });
                 chatHistory.push({ role: "assistant", content: botReply });
+                localStorage.setItem('aira_history', JSON.stringify(chatHistory));
 
-                playVoice(botReply);
+                playBrowserVoice(botReply);
 
             } catch (err) {
                 chatContainer.innerHTML += `
