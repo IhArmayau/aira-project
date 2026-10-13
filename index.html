@@ -118,7 +118,6 @@
         // Render Saved History on Load
         function renderHistory() {
             if (chatHistory.length > 0) {
-                // Clear initial greeting if history exists
                 chatContainer.innerHTML = '';
                 chatHistory.forEach(msg => {
                     const isUser = msg.role === 'user';
@@ -200,7 +199,7 @@
             micBtn.style.display = 'none';
         }
 
-        // 1. Browser Speech Synthesis (High Performance Voice Engine)
+        // Improved Browser Speech Synthesis (Female Voice & Clear Audio)
         function playBrowserVoice(rawHtml) {
             if (!('speechSynthesis' in window)) return;
             window.speechSynthesis.cancel();
@@ -211,10 +210,21 @@
             if (!plainText) return;
 
             const utterance = new SpeechSynthesisUtterance(plainText);
-            // Auto-detect language
             const isEnglish = /^[A-Za-z0-9\s.,!?-]+$/.test(plainText.slice(0, 20));
             utterance.lang = isEnglish ? 'en-US' : 'ha-NG';
+            
+            // Gyara sauri da kuma sautin muryar domin ta fi fitowa da kyau (muryar mace)
             utterance.rate = 1.0;
+            utterance.pitch = 1.3;
+
+            // Zaɓar muryar mace da ke cikin na'urar ta atomatik
+            const voices = window.speechSynthesis.getVoices();
+            const preferredVoice = voices.find(v => 
+                (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('susan') || v.name.toLowerCase().includes('victoria'))
+            );
+            if (preferredVoice) {
+                utterance.voice = preferredVoice;
+            }
 
             utterance.onstart = () => {
                 avatarCore.classList.add('speaking-active');
@@ -232,6 +242,12 @@
             };
 
             window.speechSynthesis.speak(utterance);
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => {
+                window.speechSynthesis.getVoices();
+            };
         }
 
         // Code execution simulation or copy toolbar injector
