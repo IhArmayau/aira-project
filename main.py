@@ -19,7 +19,7 @@ from pypdf import PdfReader
 app = FastAPI(
     title="AIRA Backend API",
     description="Multi-billion Dollar AI Engine & Problem Solver for Al-Gaddaf Technology Hub",
-    version="2.0.10"
+    version="2.0.11"
 )
 
 app.add_middleware(
@@ -139,7 +139,7 @@ async def generate_voice_async(text: str):
     if not clean_text:
         clean_text = "Sannu, ga amsar da AIRA ta gina muku."
     
-    clean_text = clean_text[:600]
+    clean_text = clean_text[:400]
     encoded_text = urllib.parse.quote(clean_text)
     
     target_lang = "en" if any(ord(c) < 128 and c.isalpha() for c in clean_text[:10]) else "ha"
@@ -148,15 +148,20 @@ async def generate_voice_async(text: str):
     output_audio_path = "aira_voice.mp3"
     
     try:
-        async with httpx.AsyncClient() as client_http:
-            response = await client_http.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        async with httpx.AsyncClient(timeout=10.0) as client_http:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            response = await client_http.get(url, headers=headers)
             if response.status_code == 200:
                 with open(output_audio_path, "wb") as f:
                     f.write(response.content)
                 if os.path.exists(output_audio_path):
                     return output_audio_path
+            else:
+                print(f"Google TTS Warning Status: {response.status_code}")
     except Exception as e:
-        print(f"Google TTS Notice: {e}")
+        print(f"Google TTS Exception: {e}")
     return None
 
 @app.get("/")
@@ -242,10 +247,13 @@ async def chat_multimodal(
 
 @app.post("/api/voice")
 async def get_voice(text: str = Form(...)):
-    audio_file = await generate_voice_async(text)
-    if audio_file and os.path.exists(audio_file):
-        return FileResponse(audio_file, media_type="audio/mpeg", filename="aira_voice.mp3")
-    raise HTTPException(status_code=500, detail="Voice generation failed.")
+    try:
+        audio_file = await generate_voice_async(text)
+        if audio_file and os.path.exists(audio_file):
+            return FileResponse(audio_file, media_type="audio/mpeg", filename="aira_voice.mp3")
+        raise HTTPException(status_code=400, detail="Voice generation temporarily limited.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/export/word")
 async def export_word(text: str = Form(...)):
