@@ -3,6 +3,7 @@ import os
 import re
 import json
 import asyncio
+import urllib.parse
 import docx
 import openpyxl
 import httpx
@@ -14,12 +15,11 @@ from pydantic import BaseModel
 from typing import List, Optional
 from openai import OpenAI
 from pypdf import PdfReader
-import edge_tts
 
 app = FastAPI(
-    title="AIRA Genius Backend API",
+    title="AIRA Backend API",
     description="Multi-billion Dollar AI Engine for Al-Gaddaf Technology Hub",
-    version="2.0.5"
+    version="2.0.6"
 )
 
 app.add_middleware(
@@ -125,21 +125,31 @@ def log_to_dataset(user_input: str, bot_response: str):
     except Exception as e:
         print(f"Error logging dataset: {e}")
 
-async def generate_voice_async(text: str, voice: str = "ha-NG-IbrahimNeural"):
+async def generate_voice_async(text: str):
     clean_text = re.sub(r'<[^>]*>', '', text)
     clean_text = re.sub(r'[*#_`~]', '', clean_text).strip()
     if not clean_text:
         clean_text = "Sannu, ga amsar da AIRA ta gina muku."
-    clean_text = clean_text[:300]
-
+    
+    clean_text = clean_text[:200]
+    encoded_text = urllib.parse.quote(clean_text)
+    
+    # Gano ko harshen Turanci ne ko Hausa ta hanyar duba harafin farko
+    target_lang = "en" if any(ord(c) < 128 and c.isalpha() for c in clean_text[:10]) else "ha"
+    
+    url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_text}&tl={target_lang}&client=tw-ob"
     output_audio_path = "aira_voice.mp3"
+    
     try:
-        communicate = edge_tts.Communicate(clean_text, voice)
-        await communicate.save(output_audio_path)
-        if os.path.exists(output_audio_path):
-            return output_audio_path
+        async with httpx.AsyncClient() as client_http:
+            response = await client_http.get(url, headers={"User-Agent": "Mozilla/5.0"})
+            if response.status_code == 200:
+                with open(output_audio_path, "wb") as f:
+                    f.write(response.content)
+                if os.path.exists(output_audio_path):
+                    return output_audio_path
     except Exception as e:
-        print(f"TTS Notice: {e}")
+        print(f"Google TTS Notice: {e}")
     return None
 
 @app.get("/")
