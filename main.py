@@ -4,6 +4,7 @@ import re
 import json
 import asyncio
 import urllib.parse
+from pathlib import Path
 import docx
 import openpyxl
 import httpx
@@ -13,13 +14,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
-from openai import OpenAI
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from duckduckgo_search import DDGS
 from pypdf import PdfReader
 
 app = FastAPI(
-    title="AIRA Backend API",
-    description="Multi-billion Dollar AI Engine & Problem Solver for Al-Gaddaf Technology Hub",
-    version="2.0.11"
+    title="Malama AIRA E-Library API",
+    description="Trilingual Autonomous AI E-Library & Higher-Education Teacher for Al-Gaddaf Technology Hub",
+    version="3.1.0"
 )
 
 app.add_middleware(
@@ -30,80 +33,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_FALLBACK_API_KEY"),
+# --- 1. LOAD YOUR CUSTOM HUGGING FACE MODEL ---
+MODEL_REPO = "IhArmayau/malama-aira-trilingual-1.5b"
+print(f"--- Loading Malama AIRA Model: {MODEL_REPO} ---")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO)
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_REPO, 
+    torch_dtype=torch.float16, 
+    device_map="auto"
 )
 
-SYSTEM_PROMPT = """You are AIRA (Artificial Intelligence Responsive Assistant), a world-class AI Tutor and Master Problem Solver developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
+# --- 2. LOCAL BOOK LIBRARY SETUP ---
+BOOK_LIBRARY_DIR = "aira_full_library"
+os.makedirs(BOOK_LIBRARY_DIR, exist_ok=True)
 
-CRITICAL LANGUAGE RULE (STRICT ENFORCEMENT):
-- NEVER respond in Hausa when the user asks a question in English.
-- If the user writes in English, your entire response MUST be in clear, natural English.
-- If the user writes in Hausa, your entire response MUST be in clear, natural Hausa (Hausa ta zamani, mai sauƙin fahimta).
+SYSTEM_PROMPT = """You are Malama AIRA, an advanced trilingual e-library digital teacher and higher-education assistant supporting English, Hausa, and Jalingo Fulfulde, developed by Habibu Armayau Isah at Al-Gaddaf Technology Hub, named after Director Gaddafi Abubakar's daughter.
 
-PROBLEM SOLVING & CODE DEBUGGING CAPABILITIES:
-1. CODE ERRORS & EXCEPTIONS:
-   - When a user provides broken code, stack traces, or error logs, isolate the exact broken line, explain why it failed simply, and provide the corrected code block using clean HTML tags.
-2. STEP-BY-STEP PROBLEM BREAKDOWN:
-   - For complex technical, mathematical, or logic problems, always break down explanations into clear, sequential steps (e.g., Step 1: Analysis, Step 2: Strategy, Step 3: Execution).
+CRITICAL LANGUAGE RULE:
+- Match the user's language precisely (English for English, Hausa for Hausa).
+- Never mix up local geography: Jalingo is strictly in Taraba State, Nigeria.
+- Structure answers clearly using clean HTML tags (<p>, <pre><code>, <strong>, <ul><li>) as requested by the frontend interface."""
 
-FOUNDER, DIRECTOR & ORGANIZATION RULES:
-1. FOUNDER / CREATOR QUERY:
-   - User asks in English: "Habibu Armayau Isah is my founder and creator. He is a skilled Software Engineer born in Kano and a graduate of Bayero University Kano (BUK). He currently works at Al-Gaddaf Technology Hub, leading the technology department and developing innovative solutions like me, AIRA, named after our Director Gaddafi Abubakar's daughter."
-   - User asks in Hausa: "Habibu Armayau Isah ne ya kafa ni kuma ya kirkiro ni. Shi ƙwararren mai tsara manhaja ne wanda aka haifa a Kano, kuma ya yi karatunsa a Jami'ar Bayero ta Kano (BUK). A yanzu yana aiki a Al-Gaddaf Technology Hub, inda yake jagorantar ɓangaren fasaha da ƙirƙirar sabbin manhajoji irin su ni AIRA, wacce aka sanya wa suna saboda 'yar daraktan mu, Gaddafi Abubakar."
+def search_local_book_library(query):
+    """Searches through downloaded textbooks offline"""
+    extracted_context = ""
+    library_path = Path(BOOK_LIBRARY_DIR)
+    if not list(library_path.glob("*.pdf")):
+        return ""
+    
+    try:
+        for pdf_file in library_path.glob("*.pdf"):
+            reader = PdfReader(pdf_file)
+            for page_num, page in enumerate(reader.pages):
+                text = page.extract_text() or ""
+                if any(kw.lower() in text.lower() for kw in query.split()[:3]):
+                    extracted_context += f"\n[Source Book: {pdf_file.name}, Page {page_num+1}]\n{text[:400]}\n"
+    except Exception:
+        pass
+    return extracted_context
 
-2. MR. GADDAFI ABUBAKAR QUERY:
-   - User asks in English: "Mr. Gaddafi Abubakar is the founder and Director of Al-Gaddaf Technology Hub. He is a visionary leader who supports technological growth and empowers youth to build innovative software solutions."
-   - User asks in Hausa: "Mr. Gaddafi Abubakar shine wanda ya kafa kuma Daraktan Al-Gaddaf Technology Hub. Shi jagora ne mai hangen nesa da ke tallafa wa ci gaban fasaha da kuma matasa masu ƙirƙirar sabbin abubuwa a fannin kimiyya da fasaha."
-
-3. AL-GADDAF TECHNOLOGY HUB QUERY:
-   - User asks in English: "Al-Gaddaf Technology Hub is a technology and innovation center focused on advancing modern software engineering, youth training, and providing smart tech solutions."
-   - User asks in Hausa: "Al-Gaddaf Technology Hub cibiya ce ta fasaha da sabbin kirkire-kirkire wacce ke mai da hankali kan haɓaka fasahar zamani, horar da matasa, da kuma samar da ingantattun manhajoji."
-
-4. NAME / IDENTITY QUERY:
-   - User asks in English: "My name is AIRA, which stands for Artificial Intelligence Responsive Assistant. I was created by Habibu Armayau Isah at Al-Gaddaf Technology Hub and named after our director Gaddafi Abubakar's daughter."
-   - User asks in Hausa: "Sunana AIRA, wanda yake nufin Artificial Intelligence Responsive Assistant. Habibu Armayau Isah ne ya kirkiro ni a Al-Gaddaf Technology Hub, kuma an sanya min suna ne saboda 'yar daraktan mu, Gaddafi Abubakar."
-
-5. GREETINGS & TEACHING:
-   - For simple greetings like "hello", "hi", "sannu", respond briefly in the exact language used.
-   - For teaching topics, teach directly step-by-step in the user's language without unnecessary self-introductions.
-
-STRICT HTML FORMATTING FOR FRONTEND COMPATIBILITY:
-- Never use raw Markdown syntax like ### or **.
-- Always structure outputs using clean HTML tags:
-  - Paragraphs: <p class="mb-2">...</p>
-  - Line breaks: <br>
-  - Headings/Titles: <strong class="text-blue-400 font-bold block my-2 text-base">...</strong>
-  - Code Blocks: <pre class="bg-gray-900 text-green-400 p-3 rounded my-2 border border-gray-700 font-mono text-xs overflow-x-auto"><code>...</code></pre>
-  - Lists: <ul class="list-disc pl-5 space-y-1 my-2"><li>...</li></ul>
-
-TEEN TUTOR PEDAGOGY (Ages 12-16):
-- Keep explanations clear, simple, and step-by-step.
-- Always end explanations with a single warm interactive question to check understanding.
-"""
-
-async def keep_alive_ping():
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "https://aira-project-q0iz.onrender.com")
-    while True:
-        try:
-            async with httpx.AsyncClient() as client_http:
-                await client_http.get(render_url)
-        except Exception:
-            pass
-        await asyncio.sleep(600)
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(keep_alive_ping())
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    message: str
-    history: Optional[List[ChatMessage]] = []
+def autonomous_web_search(query):
+    """Fetches live context from the web autonomously"""
+    results_text = ""
+    try:
+        with DDGS() as ddgs:
+            results = [r for r in ddgs.text(query, max_results=3)]
+            for r in results:
+                results_text += f"Source Title: {r.get('title')}\nExcerpt: {r.get('body')}\n\n"
+    except Exception:
+        pass
+    return results_text
 
 def extract_text_from_pdf_bytes(file_bytes):
     try:
@@ -133,42 +112,21 @@ def log_to_dataset(user_input: str, bot_response: str):
     except Exception as e:
         print(f"Error logging dataset: {e}")
 
-async def generate_voice_async(text: str):
-    clean_text = re.sub(r'<[^>]*>', '', text)
-    clean_text = re.sub(r'[*#_`~]', '', clean_text).strip()
-    if not clean_text:
-        clean_text = "Sannu, ga amsar da AIRA ta gina muku."
-    
-    clean_text = clean_text[:400]
-    encoded_text = urllib.parse.quote(clean_text)
-    
-    target_lang = "en" if any(ord(c) < 128 and c.isalpha() for c in clean_text[:10]) else "ha"
-    
-    url = f"https://translate.google.com/translate_tts?ie=UTF-8&q={encoded_text}&tl={target_lang}&client=tw-ob"
-    output_audio_path = "aira_voice.mp3"
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client_http:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            response = await client_http.get(url, headers=headers)
-            if response.status_code == 200:
-                with open(output_audio_path, "wb") as f:
-                    f.write(response.content)
-                if os.path.exists(output_audio_path):
-                    return output_audio_path
-            else:
-                print(f"Google TTS Warning Status: {response.status_code}")
-    except Exception as e:
-        print(f"Google TTS Exception: {e}")
-    return None
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: Optional[List[ChatMessage]] = []
+    lang: Optional[str] = "en"
 
 @app.get("/")
 def read_root():
     return {
         "status": "online",
-        "assistant": "AIRA (Artificial Intelligence Responsive Assistant & Problem Solver)",
+        "assistant": "Malama AIRA E-Library & Problem Solver Agent",
+        "model": MODEL_REPO,
         "organization": "Al-Gaddaf Technology Hub",
         "lead_developer": "Habibu Armayau Isah"
     }
@@ -176,25 +134,44 @@ def read_root():
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Step 1: Check local offline textbook library first
+        context = search_local_book_library(request.message)
+        
+        # Step 2: If no local book found, search web autonomously
+        if not context.strip():
+            context = autonomous_web_search(request.message)
+            
+        if not context.strip():
+            context = "General academic knowledge base for Malama AIRA."
+
+        # Step 3: Build prompt sequence for your local model
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
         if request.history:
             for h in request.history:
                 messages.append({"role": h.role, "content": h.content})
+                
+        user_full_prompt = f"RESEARCH CONTEXT:\n{context}\n\nSTUDENT QUESTION: {request.message}"
+        messages.append({"role": "user", "content": user_full_prompt})
         
-        messages.append({"role": "user", "content": request.message})
-
-        response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
-            messages=messages,
-            temperature=0.2,
-            max_tokens=1000,
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+        
+        outputs = model.generate(
+            **inputs, 
+            max_new_tokens=400, 
+            do_sample=True, 
+            temperature=0.3, 
+            repetition_penalty=1.2,
+            pad_token_id=tokenizer.eos_token_id
         )
-        bot_reply = response.choices[0].message.content
+        
+        bot_reply = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         log_to_dataset(request.message, bot_reply)
-
-        return {
-            "reply": bot_reply
-        }
+        
+        return {"reply": bot_reply}
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -204,20 +181,11 @@ async def chat_multimodal(
     file: Optional[UploadFile] = File(None)
 ):
     try:
-        user_content = []
         pdf_context = ""
-
         if file:
             contents = await file.read()
             ext = os.path.splitext(file.filename)[1].lower()
-
-            if ext in ['.png', '.jpg', '.jpeg', '.webp']:
-                base64_img = base64.b64encode(contents).decode('utf-8')
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-                })
-            elif ext == '.pdf':
+            if ext == '.pdf':
                 pdf_text = extract_text_from_pdf_bytes(contents)
                 pdf_context = f"\n--- CONTENTS OF UPLOADED PDF ({file.filename}) ---\n{pdf_text}\n"
 
@@ -225,40 +193,66 @@ async def chat_multimodal(
         if pdf_context:
             final_prompt = f"{pdf_context}\nUser Question: {message if message else 'Summarize key points and solve any issues found.'}"
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        if user_content:
-            user_content.insert(0, {"type": "text", "text": final_prompt})
-            messages.append({"role": "user", "content": user_content})
-        else:
-            messages.append({"role": "user", "content": final_prompt if final_prompt else "Sannu AIRA"})
+        # Search local or web for additional context if query requires it
+        context = search_local_book_library(final_prompt)
+        if not context.strip():
+            context = autonomous_web_search(final_prompt)
 
-        response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
-            messages=messages,
-            temperature=0.2,
-            max_tokens=1000,
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"CONTEXT:\n{context}\n\nPROMPT:\n{final_prompt}"}
+        ]
+        
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = tokenizer(prompt, return_tensors="pt").to("cuda" if torch.cuda.is_available() else "cpu")
+        
+        outputs = model.generate(
+            **inputs, 
+            max_new_tokens=400, 
+            do_sample=True, 
+            temperature=0.3, 
+            repetition_penalty=1.2,
+            pad_token_id=tokenizer.eos_token_id
         )
-        bot_reply = response.choices[0].message.content
+        
+        bot_reply = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         log_to_dataset(final_prompt, bot_reply)
 
         return {"reply": bot_reply}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/voice")
-async def get_voice(text: str = Form(...)):
+@app.post("/api/books/download")
+async def api_download_book(book_url: str = Form(...), book_name: str = Form(...)):
+    """Autonomously downloads and indexes full textbooks into local storage"""
+    safe_filename = "".join([c if c.isalnum() else "_" for c in book_name]) + ".pdf"
+    file_path = Path(BOOK_LIBRARY_DIR) / safe_filename
+    
+    if file_path.exists():
+        return {"status": "success", "message": f"Book '{book_name}' is already in local storage."}
+        
     try:
-        audio_file = await generate_voice_async(text)
-        if audio_file and os.path.exists(audio_file):
-            return FileResponse(audio_file, media_type="audio/mpeg", filename="aira_voice.mp3")
-        raise HTTPException(status_code=400, detail="Voice generation temporarily limited.")
+        response = httpx.get(book_url, timeout=30)
+        if response.status_code == 200:
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+            return {"status": "success", "message": f"Successfully downloaded and indexed '{book_name}' locally."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+        
+    raise HTTPException(status_code=400, detail="Failed to download book from the given URL.")
+
+@app.get("/api/books/list")
+async def list_local_books():
+    """Lists all locally stored offline textbooks"""
+    library_path = Path(BOOK_LIBRARY_DIR)
+    books = [f.name for f in library_path.glob("*.pdf")]
+    return {"local_library": books}
 
 @app.post("/api/export/word")
 async def export_word(text: str = Form(...)):
     doc = docx.Document()
-    doc.add_heading("AIRA Problem Solver Report - Al-Gaddaf Tech Hub", level=1)
+    doc.add_heading("Malama AIRA E-Library Report - Al-Gaddaf Tech Hub", level=1)
     for line in text.split("\n"):
         if line.strip():
             doc.add_paragraph(line)
