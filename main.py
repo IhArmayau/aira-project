@@ -17,7 +17,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_REPO = "IhArmayau/malama-aira-9b"
+# Muna amfani da babban samfurin asali wanda Hugging Face ke goyon bayansa ta API
+MODEL_REPO = "google/gemma-2-9b-it"
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 client = InferenceClient(model=MODEL_REPO, token=HF_TOKEN)
