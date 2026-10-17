@@ -1,4 +1,3 @@
-fastapi
 uvicorn
 openai
 pypdf
@@ -8,3 +7,6 @@ matplotlib
 edge-tts
 httpx
 python-multipart
+gradio
+huggingface_hub
+duckduckgo_search
