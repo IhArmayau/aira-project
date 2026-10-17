@@ -1,13 +1,25 @@
 import os
-import gradio as gr
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
 from huggingface_hub import InferenceClient
 from duckduckgo_search import DDGS
 
-# Sunan model ɗinka na asali wanda ka horar da shi
+app = FastAPI(title="AIRA - Al-Gaddaf Technology Hub Backend")
+
+# Ba da izinin sadarwa daga ko wanne shafi (CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 MODEL_REPO = "IhArmayau/malama-aira-9b"
 HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Muna amfani da InferenceClient don tura aiki kai tsaye zuwa sabar HF
 client = InferenceClient(model=MODEL_REPO, token=HF_TOKEN)
 
 SYSTEM_PROMPT = """Sunanki Malama AIRA. Ke ƙwararriyar malama ce kuma babbar mai taimaka wa ɗalibai a fannin E-Library a Al-Gaddaf Technology Hub da ke Jalingo, Jihar Taraba, Najeriya. 
@@ -16,6 +28,14 @@ KA'IDOJI DA AIKI NA MUSAMMAN:
 1. Harshe: Ki riƙa amsa duk wata tambaya a cikin cikakkiyar kuma ingantacciyar harshen Hausa, Turanci, ko Fulfulde gwargwadon yadda mai magana ya zo miki.
 2. Aikin E-Library & Bincike: Idan aka kawo miki sakamakon bincike na intanet (Search Results) a ƙasa, kada ki tsaya yin ƙarin tambayoyi. Nan take ki yi amfani da su wajen gabatar da littattafan, taƙaitaccen bayani, da mahadun (links) na gaske ga ɗalibi kai tsaye.
 3. Hali da Kwarewa: Ki kasance mai haƙuri, mai ilimi, mai ba da kwarin gwiwa, kuma mai sauƙin fahimta."""
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: Optional[List[ChatMessage]] = []
 
 def search_web(query):
     try:
@@ -32,46 +52,59 @@ def search_web(query):
     except Exception as e:
         return f"(Binciken intanet bai samu nasara ba a yanzu: {str(e)})"
 
-def predict(message, history):
-    lower_msg = message.lower()
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    lower_msg = request.message.lower()
     search_keywords = ["nemo", "littafi", "search", "book", "pdf", "download", "physics", "chemistry", "biology", "mathematics"]
     
     extra_context = ""
     if any(kw in lower_msg for kw in search_keywords):
-        extra_context = search_web(message)
+        extra_context = search_web(request.message)
 
-    # Shirya saƙonni irin na chat format
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     
     if extra_context:
         messages.append({"role": "system", "content": extra_context})
 
-    # Ƙara taɗin da ya gabata (history)
-    for human, assistant in history:
-        messages.append({"role": "user", "content": human})
-        messages.append({"role": "assistant", "content": assistant})
+    # Ƙara tarihin hira
+    for h in request.history:
+        messages.append({"role": h.role, "content": h.content})
     
-    # Ƙara sabuwar tambayar da ɗalibi ya yi
-    messages.append({"role": "user", "content": message})
+    messages.append({"role": "user", "content": request.message})
 
     try:
-        # Kiran model ɗinka ta hanyar Inference API
         response = client.chat_completion(
             messages=messages,
-            max_tokens=250,
+            max_tokens=300,
             temperature=0.3,
             top_p=0.9
         )
         reply = response.choices[0].message.content
-        return reply.strip()
+        return {"reply": reply.strip()}
     except Exception as e:
-        return f"Yi haƙuri, an sami matsala wajen tuntuɓar sabar Malama AIRA: {str(e)}"
+        return {"reply": f"Yi haƙuri, an sami matsala wajen tuntuɓar sabar Malama AIRA: {str(e)}"}
 
-demo = gr.ChatInterface(
-    fn=predict, 
-    title="AIRA - Al-Gaddaf Technology Hub",
-    description="Developed by Habibu Armayau Isah (NYSC) | E-Library Assistant"
-)
+@app.post("/api/chat/multimodal")
+async def multimodal_chat(message: str = Form(...), file: Optional[UploadFile] = File(None)):
+    file_info = f"\n[An shigar da fayil mai suna: {file.filename}]" if file else ""
+    full_query = message + file_info
+    
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": full_query}
+    ]
+
+    try:
+        response = client.chat_completion(
+            messages=messages,
+            max_tokens=300,
+            temperature=0.3
+        )
+        reply = response.choices[0].message.content
+        return {"reply": reply.strip()}
+    except Exception as e:
+        return {"reply": f"Yi haƙuri, an sami kuskure wajen nazarin fayil ɗin: {str(e)}"}
 
 if __name__ == "__main__":
-    demo.launch()
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=7860)
